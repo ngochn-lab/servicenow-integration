@@ -13,21 +13,33 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class SuccessFactorsServiceImpl implements SuccessFactorsService {
     private final SAPClient sapClient;
-
-    public SuccessFactorsServiceImpl(SAPClient sapClient) {
+    private final ServiceNowMapper serviceNowMapper;
+    public SuccessFactorsServiceImpl(SAPClient sapClient, ServiceNowMapper serviceNowMapper) {
         this.sapClient = sapClient;
+        this.serviceNowMapper = serviceNowMapper;
     }
 
     @Override
     public EmployeeProfileDTO getEmployeeProfile(String id) {
         // Call success factors API
         BaseResponse sapResponse = sapClient.getEmployeeProfile(id);
+        String code = sapResponse.getCode();
         OnboardingCandidateInfoDTO onboardingCandidateInfoDTO = (OnboardingCandidateInfoDTO) sapResponse.getData();
-        if (onboardingCandidateInfoDTO == null) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Employee profile not found");
+        if ("200".equals(code) && onboardingCandidateInfoDTO != null) {
+            return serviceNowMapper.toEmployeeProfileDTO(onboardingCandidateInfoDTO);
         }
-        EmployeeProfileDTO employeeProfile = new EmployeeProfileDTO();
-        employeeProfile = ServiceNowMapper.toEmployeeProfileDTO(onboardingCandidateInfoDTO); // Return transformed response
-        return employeeProfile;
+
+        // Map other statuses appropriately
+        int statusVal;
+        try {
+            statusVal = Integer.parseInt(code);
+        } catch (Exception e) {
+            statusVal = 502; // Bad gateway for unexpected upstream responses
+        }
+        HttpStatus status = HttpStatus.resolve(statusVal);
+        if (status == null) status = HttpStatus.INTERNAL_SERVER_ERROR;
+        String message = sapResponse.getMessage() != null ? sapResponse.getMessage() : "Upstream error";
+        throw new ResponseStatusException(status, message);
     }
 }
+

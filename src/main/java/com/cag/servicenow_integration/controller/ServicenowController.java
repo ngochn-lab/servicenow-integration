@@ -60,7 +60,7 @@ public class ServicenowController {
         sb.append(escapeCsv(dto.getPreferredPronoun())).append(",");
         sb.append(escapeCsv(dto.getLegalName())).append(",");
         sb.append(escapeCsv(dto.getPositionType())).append(",");
-        sb.append(escapeCsv(dto.getUser() != null ? dto.getUser().toString() : "")).append(",");
+        sb.append(escapeCsv(dto.getUser() != null ? dto.getUser().getValue() : "")).append(",");
         sb.append(escapeCsv(dto.getSysCreatedBy())).append("\n");
         return sb.toString();
     }
@@ -75,3 +75,4 @@ public class ServicenowController {
         return value;
     }
 }
+

@@ -3,9 +3,18 @@ package com.cag.servicenow_integration.mapper;
 import com.cag.servicenow_integration.dto.sap.OnboardingCandidateInfoDTO;
 import com.cag.servicenow_integration.dto.servicenow.EmployeeProfileDTO;
 import com.cag.servicenow_integration.dto.servicenow.LinkValueDTO;
+import com.cag.servicenow_integration.config.ServiceNowApiProperties;
+import org.springframework.stereotype.Component;
 
+@Component
 public class ServiceNowMapper {
-    public static EmployeeProfileDTO toEmployeeProfileDTO(OnboardingCandidateInfoDTO onboardingCandidateInfoDTO) {
+    private final ServiceNowApiProperties serviceNowApiProperties;
+
+    public ServiceNowMapper(ServiceNowApiProperties serviceNowApiProperties) {
+        this.serviceNowApiProperties = serviceNowApiProperties;
+    }
+
+    public EmployeeProfileDTO toEmployeeProfileDTO(OnboardingCandidateInfoDTO onboardingCandidateInfoDTO) {
         EmployeeProfileDTO employeeProfile = new EmployeeProfileDTO();
 
         if (onboardingCandidateInfoDTO == null) {
@@ -25,7 +34,10 @@ public class ServiceNowMapper {
 
         LinkValueDTO user = new LinkValueDTO();
         user.setValue(onboardingCandidateInfoDTO.getUserId());
-        user.setLink("https://dev313338.service-now.com/api/now/table/sys_user/" + onboardingCandidateInfoDTO.getUserId());
+        String base = serviceNowApiProperties.getInstanceBaseUrl();
+        if (base == null) base = "";
+        String normalizedBase = base.endsWith("/") ? base.substring(0, base.length() - 1) : base;
+        user.setLink(normalizedBase + "/api/now/table/sys_user/" + onboardingCandidateInfoDTO.getUserId());
         employeeProfile.setUser(user);
         employeeProfile.setWorkMobile("");
         employeeProfile.setWorkPhone("");

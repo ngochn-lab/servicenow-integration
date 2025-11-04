@@ -4,7 +4,6 @@ import com.cag.servicenow_integration.response.BaseResponse;
 import jakarta.validation.ConstraintViolationException;
 import java.util.stream.Collectors;
 
-import org.springframework.data.crossstore.ChangeSetPersister;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -21,7 +20,7 @@ public class GlobalExceptionHandler {
                 .map(err -> err.getField() + ": " + err.getDefaultMessage())
                 .collect(Collectors.joining(", "));
         BaseResponse baseResponse = new BaseResponse();
-        baseResponse.setCode(HttpStatus.BAD_REQUEST.toString());
+        baseResponse.setCode(String.valueOf(HttpStatus.BAD_REQUEST.value()));
         baseResponse.setMessage(message);
         return ResponseEntity.badRequest().body(baseResponse);
     }
@@ -29,7 +28,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ConstraintViolationException.class)
     public ResponseEntity<?> handleConstraint(ConstraintViolationException ex) {
         BaseResponse baseResponse = new BaseResponse();
-        baseResponse.setCode(HttpStatus.BAD_REQUEST.toString());
+        baseResponse.setCode(String.valueOf(HttpStatus.BAD_REQUEST.value()));
         baseResponse.setMessage(ex.getMessage());
         return ResponseEntity.badRequest().body(baseResponse);
     }
@@ -37,17 +36,16 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpStatusCodeException.class)
     public ResponseEntity<?> handleAdapter(HttpStatusCodeException ex) {
         int status = ex.getStatusCode().value();
-        String msg = "Adapter error: " + ex.getStatusText();
         BaseResponse baseResponse = new BaseResponse();
-        baseResponse.setCode(String.valueOf(ex.getStatusCode().value()));
-        baseResponse.setMessage(ex.getMessage());
+        baseResponse.setCode(String.valueOf(status));
+        baseResponse.setMessage(ex.getStatusText());
         return ResponseEntity.status(status).body(baseResponse);
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<?> handleOther(Exception ex) {
         BaseResponse baseResponse = new BaseResponse();
-        baseResponse.setCode(HttpStatus.INTERNAL_SERVER_ERROR.toString());
+        baseResponse.setCode(String.valueOf(HttpStatus.INTERNAL_SERVER_ERROR.value()));
         baseResponse.setMessage("Unexpected error: " + ex.getMessage());
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(baseResponse);
     }
@@ -56,7 +54,8 @@ public class GlobalExceptionHandler {
     public ResponseEntity<?> handleNotFound(ResponseStatusException ex) {
         BaseResponse baseResponse = new BaseResponse();
         baseResponse.setCode(String.valueOf(ex.getStatusCode().value()));
-        baseResponse.setMessage(ex.getLocalizedMessage());
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(baseResponse);
+        baseResponse.setMessage(ex.getReason());
+        return ResponseEntity.status(ex.getStatusCode()).body(baseResponse);
     }
 }
+
