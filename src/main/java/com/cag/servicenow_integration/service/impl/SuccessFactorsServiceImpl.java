@@ -6,32 +6,28 @@ import com.cag.servicenow_integration.dto.servicenow.EmployeeProfileDTO;
 import com.cag.servicenow_integration.mapper.ServiceNowMapper;
 import com.cag.servicenow_integration.response.BaseResponse;
 import com.cag.servicenow_integration.service.SuccessFactorsService;
-import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 @Service
-@RequiredArgsConstructor
 public class SuccessFactorsServiceImpl implements SuccessFactorsService {
-    @Autowired
-    private SAPClient sapClient;
+    private final SAPClient sapClient;
+
+    public SuccessFactorsServiceImpl(SAPClient sapClient) {
+        this.sapClient = sapClient;
+    }
 
     @Override
     public EmployeeProfileDTO getEmployeeProfile(String id) {
         // Call success factors API
         BaseResponse sapResponse = sapClient.getEmployeeProfile(id);
         OnboardingCandidateInfoDTO onboardingCandidateInfoDTO = (OnboardingCandidateInfoDTO) sapResponse.getData();
-        EmployeeProfileDTO employeeProfile = new EmployeeProfileDTO();
-
-        if (sapResponse.getCode().equals("200")) {
-            // Return transformed response
-            employeeProfile = ServiceNowMapper.toEmployeeProfileDTO(onboardingCandidateInfoDTO);
+        if (onboardingCandidateInfoDTO == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Employee profile not found");
         }
-
+        EmployeeProfileDTO employeeProfile = new EmployeeProfileDTO();
+        employeeProfile = ServiceNowMapper.toEmployeeProfileDTO(onboardingCandidateInfoDTO); // Return transformed response
         return employeeProfile;
-    }
-
-    private boolean isHired(String date) {
-        return date != null && !date.isEmpty();
     }
 }
