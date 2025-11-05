@@ -6,7 +6,6 @@ import com.cag.servicenow_integration.response.BaseResponse;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Pageable;
 import org.springframework.http.*;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -14,6 +13,8 @@ import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
+import org.springframework.web.client.ResourceAccessException;
+import java.net.SocketTimeoutException;
 
 @Slf4j
 @Component
@@ -27,8 +28,11 @@ public class SAPClient {
         this.restTemplate = restTemplate;
     }
 
-    public BaseResponse getEmployeeProfiles(Pageable pageable) {
-        String url = properties.getBaseUrl() + properties.getOnboardingCandidateEndpoint() + "?page=" + pageable.getPageNumber() + "&size=" + pageable.getPageSize();
+    public BaseResponse getEmployeeProfiles(Integer page, Integer size) {
+        // Defaults and bounds
+        int p = (page == null || page < 0) ? 0 : page;
+        int s = (size == null || size < 1) ? 50 : Math.min(size, 200);
+        String url = properties.getBaseUrl() + properties.getOnboardingCandidateEndpoint() + "?page=" + p + "&size=" + s;
         BaseResponse baseResponse = new BaseResponse();
         try {
             HttpHeaders headers = new HttpHeaders();
@@ -57,6 +61,33 @@ public class SAPClient {
             baseResponse.setCode("200");
             baseResponse.setMessage("Success");
             baseResponse.setData(onboardingCandidateInfos);
+        } catch (RestClientResponseException e) {
+            // Map overload statuses from upstream
+            int status = e.getRawStatusCode();
+            if (status == 429 || status == 503) {
+                log.warn("SAP profiles request throttled/overloaded. status={} message={}", status, e.getStatusText());
+                baseResponse.setCode(String.valueOf(status));
+                baseResponse.setMessage(StringUtils.hasText(e.getResponseBodyAsString()) ? e.getResponseBodyAsString() : e.getStatusText());
+                baseResponse.setData(null);
+            } else {
+                log.warn("SAP profiles request failed. status={} message={}", status, e.getStatusText());
+                baseResponse.setCode(String.valueOf(status));
+                baseResponse.setMessage(e.getStatusText());
+                baseResponse.setData(null);
+            }
+        } catch (ResourceAccessException e) {
+            // Likely a timeout/IO level
+            Throwable cause = e.getCause();
+            if (cause instanceof SocketTimeoutException) {
+                log.warn("SAP profiles request timed out: {}", cause.getMessage());
+                baseResponse.setCode("504");
+                baseResponse.setMessage("Gateway Timeout");
+            } else {
+                log.warn("SAP profiles resource access error: {}", e.getMessage());
+                baseResponse.setCode("503");
+                baseResponse.setMessage("Service Unavailable");
+            }
+            baseResponse.setData(null);
         } catch (Exception ex) {
             log.error("Unexpected error calling SAP: {}", ex.getMessage(), ex);
             baseResponse.setCode("500");
