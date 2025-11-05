@@ -6,9 +6,12 @@ import com.cag.servicenow_integration.dto.servicenow.EmployeeProfileDTO;
 import com.cag.servicenow_integration.mapper.ServiceNowMapper;
 import com.cag.servicenow_integration.response.BaseResponse;
 import com.cag.servicenow_integration.service.SuccessFactorsService;
-import org.springframework.http.HttpStatus;
+import com.cag.servicenow_integration.utils.GlobalUtils;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
+import java.util.List;
 
 @Service
 public class SuccessFactorsServiceImpl implements SuccessFactorsService {
@@ -28,18 +31,22 @@ public class SuccessFactorsServiceImpl implements SuccessFactorsService {
         if ("200".equals(code) && onboardingCandidateInfoDTO != null) {
             return serviceNowMapper.toEmployeeProfileDTO(onboardingCandidateInfoDTO);
         }
-
         // Map other statuses appropriately
-        int statusVal;
-        try {
-            statusVal = Integer.parseInt(code);
-        } catch (Exception e) {
-            statusVal = 502; // Bad gateway for unexpected upstream responses
+        GlobalUtils.handleOtherStatuses(code, sapResponse.getMessage());
+        return null;
+    }
+
+    @Override
+    public Page<EmployeeProfileDTO> getEmployeeProfiles(Pageable pageable) {
+        BaseResponse sapResponse = sapClient.getEmployeeProfiles(pageable);
+        String code = sapResponse.getCode();
+        if ("200".equals(code)) {
+            List<OnboardingCandidateInfoDTO> onboardingCandidateInfoDTOList = (List<OnboardingCandidateInfoDTO>) sapResponse.getData();
+            return new PageImpl<>(onboardingCandidateInfoDTOList, pageable, onboardingCandidateInfoDTOList.size()).map(serviceNowMapper::toEmployeeProfileDTO);
         }
-        HttpStatus status = HttpStatus.resolve(statusVal);
-        if (status == null) status = HttpStatus.INTERNAL_SERVER_ERROR;
-        String message = sapResponse.getMessage() != null ? sapResponse.getMessage() : "Upstream error";
-        throw new ResponseStatusException(status, message);
+        // Map other statuses appropriately
+        GlobalUtils.handleOtherStatuses(code, sapResponse.getMessage());
+        return null;
     }
 }
 

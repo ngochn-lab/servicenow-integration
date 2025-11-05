@@ -6,6 +6,7 @@ import com.cag.servicenow_integration.response.BaseResponse;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.*;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -26,6 +27,45 @@ public class SAPClient {
         this.restTemplate = restTemplate;
     }
 
+    public BaseResponse getEmployeeProfiles(Pageable pageable) {
+        String url = properties.getBaseUrl() + properties.getOnboardingCandidateEndpoint() + "?page=" + pageable.getPageNumber() + "&size=" + pageable.getPageSize();
+        BaseResponse baseResponse = new BaseResponse();
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setAccept(List.of(MediaType.APPLICATION_JSON));
+            if (StringUtils.hasText(properties.getAuthToken())) {
+                headers.setBearerAuth(properties.getAuthToken());
+            }
+            HttpEntity<Void> httpEntity = new HttpEntity<>(headers);
+            log.debug("Requesting SAP profiles with url: {}", url);
+            ResponseEntity<String> responseEntity = restTemplate.exchange(url, HttpMethod.GET, httpEntity, String.class);
+            String jsonResponse = responseEntity.getBody();
+
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode root = mapper.readTree(jsonResponse);
+            JsonNode code = root.get("code");
+            JsonNode dataNode = root.get("data").get("content");
+
+            String codeText = code != null ? code.asText() : String.valueOf(responseEntity.getStatusCode().value());
+            if (!"200".equals(codeText)) {
+                baseResponse.setCode(codeText);
+                baseResponse.setMessage(root.has("message") ? root.get("message").asText() : responseEntity.getBody());
+                baseResponse.setData(null);
+                return baseResponse;
+            }
+            List<OnboardingCandidateInfoDTO> onboardingCandidateInfos = mapper.readerForListOf(OnboardingCandidateInfoDTO.class).readValue(dataNode);
+            baseResponse.setCode("200");
+            baseResponse.setMessage("Success");
+            baseResponse.setData(onboardingCandidateInfos);
+        } catch (Exception ex) {
+            log.error("Unexpected error calling SAP: {}", ex.getMessage(), ex);
+            baseResponse.setCode("500");
+            baseResponse.setMessage("Internal Server Error");
+            baseResponse.setData(null);
+        }
+        return baseResponse;
+    }
+
     public BaseResponse getEmployeeProfile(String id) {
         String url = buildUrl(properties.getBaseUrl(), properties.getOnboardingCandidateEndpoint(), id);
         BaseResponse baseResponse = new BaseResponse();
@@ -36,7 +76,7 @@ public class SAPClient {
                 headers.setBearerAuth(properties.getAuthToken());
             }
             HttpEntity<Void> httpEntity = new HttpEntity<>(headers);
-            log.debug("Requesting SAP profile. url={}", url);
+            log.debug("Requesting a SAP profile url: {}", url);
             ResponseEntity<String> responseEntity = restTemplate.exchange(url, HttpMethod.GET, httpEntity, String.class);
             String jsonResponse = responseEntity.getBody();
 
@@ -58,8 +98,8 @@ public class SAPClient {
             baseResponse.setMessage("Success");
             baseResponse.setData(onboardingCandidateInfo);
         } catch (RestClientResponseException e) {
-            log.warn("SAP profile request failed. status={} message={}", e.getRawStatusCode(), e.getStatusText());
-            baseResponse.setCode(String.valueOf(e.getRawStatusCode()));
+            log.warn("SAP profile request failed. status={} message={}", e.getStatusCode(), e.getStatusText());
+            baseResponse.setCode(String.valueOf(e.getStatusCode()));
             baseResponse.setMessage(e.getStatusText());
             baseResponse.setData(null);
         } catch (Exception ex) {
