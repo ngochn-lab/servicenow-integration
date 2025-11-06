@@ -3,10 +3,10 @@ package com.cag.servicenow_integration.client;
 import com.cag.servicenow_integration.config.SAPApiProperties;
 import com.cag.servicenow_integration.dto.sap.OnboardingCandidateInfoDTO;
 import com.cag.servicenow_integration.response.BaseResponse;
+import com.cag.servicenow_integration.response.SapPagedResponse;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Pageable;
 import org.springframework.http.*;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -27,8 +27,8 @@ public class SAPClient {
         this.restTemplate = restTemplate;
     }
 
-    public BaseResponse getEmployeeProfiles(Pageable pageable) {
-        String url = properties.getBaseUrl() + properties.getOnboardingCandidateEndpoint() + "?page=" + pageable.getPageNumber() + "&size=" + pageable.getPageSize();
+    public BaseResponse getEmployeeProfiles(int skip, int limit) {
+        String url = properties.getBaseUrl() + properties.getOnboardingCandidateEndpoint() + "?skip=" + skip + "&limit=" + limit;
         BaseResponse baseResponse = new BaseResponse();
         try {
             HttpHeaders headers = new HttpHeaders();
@@ -44,7 +44,7 @@ public class SAPClient {
             ObjectMapper mapper = new ObjectMapper();
             JsonNode root = mapper.readTree(jsonResponse);
             JsonNode code = root.get("code");
-            JsonNode dataNode = root.get("data").get("content");
+            JsonNode dataNode = root.get("data");
 
             String codeText = code != null ? code.asText() : String.valueOf(responseEntity.getStatusCode().value());
             if (!"200".equals(codeText)) {
@@ -53,10 +53,15 @@ public class SAPClient {
                 baseResponse.setData(null);
                 return baseResponse;
             }
-            List<OnboardingCandidateInfoDTO> onboardingCandidateInfos = mapper.readerForListOf(OnboardingCandidateInfoDTO.class).readValue(dataNode);
+            JsonNode contentNode = dataNode.get("content");
+            long totalElements = dataNode.has("totalElements") ? dataNode.get("totalElements").asLong() : (contentNode != null ? contentNode.size() : 0);
+            List<OnboardingCandidateInfoDTO> onboardingCandidateInfos = mapper.readerForListOf(OnboardingCandidateInfoDTO.class).readValue(contentNode);
+            SapPagedResponse<OnboardingCandidateInfoDTO> sapPaged = new SapPagedResponse<>();
+            sapPaged.setContent(onboardingCandidateInfos);
+            sapPaged.setTotalElements(totalElements);
             baseResponse.setCode("200");
             baseResponse.setMessage("Success");
-            baseResponse.setData(onboardingCandidateInfos);
+            baseResponse.setData(sapPaged);
         } catch (Exception ex) {
             log.error("Unexpected error calling SAP: {}", ex.getMessage(), ex);
             baseResponse.setCode("500");

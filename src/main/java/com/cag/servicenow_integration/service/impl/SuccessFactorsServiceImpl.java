@@ -5,13 +5,13 @@ import com.cag.servicenow_integration.dto.sap.OnboardingCandidateInfoDTO;
 import com.cag.servicenow_integration.dto.servicenow.EmployeeProfileDTO;
 import com.cag.servicenow_integration.mapper.ServiceNowMapper;
 import com.cag.servicenow_integration.response.BaseResponse;
+import com.cag.servicenow_integration.response.PaginatedResponse;
+import com.cag.servicenow_integration.response.SapPagedResponse;
 import com.cag.servicenow_integration.service.SuccessFactorsService;
 import com.cag.servicenow_integration.utils.GlobalUtils;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class SuccessFactorsServiceImpl implements SuccessFactorsService {
@@ -37,16 +37,32 @@ public class SuccessFactorsServiceImpl implements SuccessFactorsService {
     }
 
     @Override
-    public Page<EmployeeProfileDTO> getEmployeeProfiles(Pageable pageable) {
-        BaseResponse sapResponse = sapClient.getEmployeeProfiles(pageable);
+    public PaginatedResponse<EmployeeProfileDTO> getEmployeeProfiles(int skip, int limit) {
+        BaseResponse sapResponse = sapClient.getEmployeeProfiles(skip, limit);
         String code = sapResponse.getCode();
         if ("200".equals(code)) {
-            List<OnboardingCandidateInfoDTO> onboardingCandidateInfoDTOList = (List<OnboardingCandidateInfoDTO>) sapResponse.getData();
-            return new PageImpl<>(onboardingCandidateInfoDTOList, pageable, onboardingCandidateInfoDTOList.size()).map(serviceNowMapper::toEmployeeProfileDTO);
+            SapPagedResponse<?> sapPaged = (SapPagedResponse<?>) sapResponse.getData();
+
+            List<OnboardingCandidateInfoDTO> content = (List<OnboardingCandidateInfoDTO>) sapPaged.getContent();
+            List<EmployeeProfileDTO> mapped = content.stream()
+                    .map(serviceNowMapper::toEmployeeProfileDTO)
+                    .collect(Collectors.toList());
+
+            long total = sapPaged.getTotalElements();
+            boolean hasNext = (skip + mapped.size()) < total;
+            Integer nextSkip = hasNext ? skip + mapped.size() : null;
+
+            PaginatedResponse<EmployeeProfileDTO> resp = new PaginatedResponse<>();
+            resp.setData(mapped);
+            resp.setTotalRecords(total);
+            resp.setSkip(skip);
+            resp.setLimit(limit);
+            resp.setHasNext(hasNext);
+            resp.setNextSkip(nextSkip);
+            return resp;
         }
         // Map other statuses appropriately
         GlobalUtils.handleOtherStatuses(code, sapResponse.getMessage());
         return null;
     }
 }
-

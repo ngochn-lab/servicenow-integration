@@ -1,12 +1,11 @@
 package com.cag.servicenow_integration.controller;
 
 import com.cag.servicenow_integration.dto.servicenow.EmployeeProfileDTO;
+import com.cag.servicenow_integration.response.PaginatedResponse;
 import com.cag.servicenow_integration.response.ServiceNowResponse;
 import com.cag.servicenow_integration.service.SuccessFactorsService;
 import com.cag.servicenow_integration.utils.CsvUtils;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -15,6 +14,9 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/servicenow/v1")
 public class ServicenowController {
+    private static final int DEFAULT_LIMIT = 50;
+    private static final int MAX_LIMIT = 200;
+
     private final SuccessFactorsService successFactorsService;
 
     public ServicenowController(SuccessFactorsService successFactorsService) {
@@ -22,12 +24,13 @@ public class ServicenowController {
     }
 
     @GetMapping("/employee-profiles")
-    public ResponseEntity<?> getEmployeeProfiles(
-            @RequestParam(required = false) Integer page,
-            @RequestParam(required = false) Integer size) {
-        Page<EmployeeProfileDTO> employeeProfiles = successFactorsService.getEmployeeProfiles(PageRequest.of(page, size));
-        ServiceNowResponse response = new ServiceNowResponse();
-        response.setResult(employeeProfiles.getContent());
+    public ResponseEntity<PaginatedResponse<EmployeeProfileDTO>> getEmployeeProfiles(
+            @RequestParam(required = false) Integer skip,
+            @RequestParam(required = false) Integer limit) {
+        int sanitizedSkip = skip == null || skip < 0 ? 0 : skip;
+        int sanitizedLimit = limit == null || limit <= 0 ? DEFAULT_LIMIT : Math.min(limit, MAX_LIMIT);
+
+        PaginatedResponse<EmployeeProfileDTO> response = successFactorsService.getEmployeeProfiles(sanitizedSkip, sanitizedLimit);
         return ResponseEntity.ok(response);
     }
 
