@@ -3,16 +3,18 @@ package com.cag.servicenow_integration.exception;
 import com.cag.servicenow_integration.response.BaseResponse;
 import jakarta.validation.ConstraintViolationException;
 import java.util.stream.Collectors;
+
+import org.springframework.data.crossstore.ChangeSetPersister;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.client.HttpStatusCodeException;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
-
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<?> handleValidation(MethodArgumentNotValidException ex) {
         String message = ex.getBindingResult().getFieldErrors().stream()
@@ -48,5 +50,13 @@ public class GlobalExceptionHandler {
         baseResponse.setCode(HttpStatus.INTERNAL_SERVER_ERROR.toString());
         baseResponse.setMessage("Unexpected error: " + ex.getMessage());
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(baseResponse);
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<?> handleNotFound(ResponseStatusException ex) {
+        BaseResponse baseResponse = new BaseResponse();
+        baseResponse.setCode(String.valueOf(ex.getStatusCode().value()));
+        baseResponse.setMessage(ex.getLocalizedMessage());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(baseResponse);
     }
 }

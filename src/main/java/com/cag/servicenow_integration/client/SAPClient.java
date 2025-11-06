@@ -1,49 +1,115 @@
 package com.cag.servicenow_integration.client;
 
+import com.cag.servicenow_integration.config.SAPApiProperties;
 import com.cag.servicenow_integration.dto.sap.OnboardingCandidateInfoDTO;
 import com.cag.servicenow_integration.response.BaseResponse;
-import org.springframework.beans.factory.annotation.Value;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.springframework.http.*;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 
-import java.time.LocalDateTime;
+import com.fasterxml.jackson.databind.JsonNode;
+
+import java.io.IOException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 
 @Component
 public class SAPClient {
-    @Value("${sap.api.url}")
-    private String sapApiUrl;
-
-    @Value("${sap.api.auth.token}")
-    private String authToken;
-
-    @Value("${sap.api.onboarding.candidate.endpoint}")
-    private String onboardingCandidateEndpoint;
+    private final SAPApiProperties properties;
 
     private final RestTemplate restTemplate;
 
-    public SAPClient() {
+    public SAPClient(SAPApiProperties properties) {
+        this.properties = properties;
         restTemplate = new RestTemplate();
     }
 
     public BaseResponse getEmployeeProfile(String id) {
-//        HttpHeaders headers = new HttpHeaders();
-//        headers.setContentType(MediaType.APPLICATION_JSON);
-//        headers.setBearerAuth(authToken);
-//        HttpEntity<String> entity = new HttpEntity<>(headers);
-//        ResponseEntity<BaseResponse> response = restTemplate.getForEntity(sapApiUrl + onboardingCandidateEndpoint + id, BaseResponse.class, entity);
-//        return response;
-        System.out.println("Hard-coded data from SAP");
-
+        String url = properties.getBaseUrl() + "/api/service_now/onboarding_candidate_info/" + id;
         BaseResponse baseResponse = new BaseResponse();
-        baseResponse.setCode("200");
-        baseResponse.setMessage("Success");
+        try {
+            ResponseEntity<String> responseEntity = restTemplate.getForEntity(url, String.class);
+            String jsonResponse = responseEntity.getBody();
 
-        // Mock data for testing
-        OnboardingCandidateInfoDTO onboardingCandidateInfo = getOnboardingCandidateInfoDTO();
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode root = mapper.readTree(jsonResponse);
+            JsonNode code = root.get("code");
+            JsonNode dataNode = root.get("data");
 
-        baseResponse.setData(onboardingCandidateInfo);
+            OnboardingCandidateInfoDTO onboardingCandidateInfo = mapper.treeToValue(dataNode, OnboardingCandidateInfoDTO.class);
+            baseResponse.setCode(code.asText());
+            baseResponse.setMessage("Success");
+            baseResponse.setData(onboardingCandidateInfo);
+        } catch (HttpClientErrorException e) {
+            if (e.getStatusCode().value() == 404) {
+                baseResponse.setCode("404");
+                baseResponse.setMessage("Not Found");
+                baseResponse.setData(null);
+            } else {
+                baseResponse.setCode(String.valueOf(e.getStatusCode().value()));
+                baseResponse.setMessage(e.getMessage());
+                baseResponse.setData(null);
+            }
+        } catch (Exception ex) {
+            baseResponse.setCode("500");
+            baseResponse.setMessage("Internal Server Error");
+            baseResponse.setData(null);
+        }
+        return baseResponse;
+    }
+
+    public BaseResponse getEmployeeProfileOld(String id) throws IOException, InterruptedException {
+        String url = properties.getBaseUrl() + "/api/service_now/onboarding_candidate_info/" + id;
+        HttpClient client = HttpClient.newHttpClient();
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .GET()
+                .build();
+
+        // Send request and get response body as a String
+        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        String jsonResponse = response.body();
+
+        if (jsonResponse.isEmpty() && response.statusCode() == 404) {
+            BaseResponse notFoundResponse = new BaseResponse();
+            notFoundResponse.setCode("404");
+            notFoundResponse.setMessage("Not Found");
+            notFoundResponse.setData(null);
+            return notFoundResponse;
+
+        }
+        // Parse JSON, extract "data" node, and map to DTO
+        ObjectMapper mapper = new ObjectMapper();
+        JsonNode root = mapper.readTree(jsonResponse);
+        JsonNode code = root.get("code");
+
+        // check code status 200 to proceed or throw exception/return null
+        if (!code.asText().equals("200")) {
+            BaseResponse errorResponse = new BaseResponse();
+            errorResponse.setCode(code.asText());
+            errorResponse.setMessage(root.get("message").asText());
+            errorResponse.setData(null);
+            return errorResponse;
+        }
+        JsonNode dataNode = root.get("data");
+        OnboardingCandidateInfoDTO onboardingCandidateInfo = mapper.treeToValue(dataNode, OnboardingCandidateInfoDTO.class);
+        BaseResponse baseResponse = new BaseResponse();
+
+        if (onboardingCandidateInfo != null) {
+            baseResponse.setCode("200");
+            baseResponse.setMessage("Success");
+            baseResponse.setData(onboardingCandidateInfo);
+        }
+        else {
+            baseResponse.setCode("404");
+            baseResponse.setMessage("Not Found");
+            baseResponse.setData(null);
+        }
 
         return baseResponse;
     }
