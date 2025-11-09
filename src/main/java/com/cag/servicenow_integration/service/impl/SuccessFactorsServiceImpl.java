@@ -5,29 +5,64 @@ import com.cag.servicenow_integration.dto.sap.OnboardingCandidateInfoDTO;
 import com.cag.servicenow_integration.dto.servicenow.EmployeeProfileDTO;
 import com.cag.servicenow_integration.mapper.ServiceNowMapper;
 import com.cag.servicenow_integration.response.BaseResponse;
+import com.cag.servicenow_integration.response.PaginatedResponse;
+import com.cag.servicenow_integration.response.SapPagedResponse;
 import com.cag.servicenow_integration.service.SuccessFactorsService;
-import org.springframework.http.HttpStatus;
+import com.cag.servicenow_integration.utils.GlobalUtils;
 import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class SuccessFactorsServiceImpl implements SuccessFactorsService {
     private final SAPClient sapClient;
-
-    public SuccessFactorsServiceImpl(SAPClient sapClient) {
+    private final ServiceNowMapper serviceNowMapper;
+    public SuccessFactorsServiceImpl(SAPClient sapClient, ServiceNowMapper serviceNowMapper) {
         this.sapClient = sapClient;
+        this.serviceNowMapper = serviceNowMapper;
     }
 
     @Override
     public EmployeeProfileDTO getEmployeeProfile(String id) {
         // Call success factors API
         BaseResponse sapResponse = sapClient.getEmployeeProfile(id);
+        String code = sapResponse.getCode();
         OnboardingCandidateInfoDTO onboardingCandidateInfoDTO = (OnboardingCandidateInfoDTO) sapResponse.getData();
-        if (onboardingCandidateInfoDTO == null) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Employee profile not found");
+        if ("200".equals(code) && onboardingCandidateInfoDTO != null) {
+            return serviceNowMapper.toEmployeeProfileDTO(onboardingCandidateInfoDTO);
         }
-        EmployeeProfileDTO employeeProfile = new EmployeeProfileDTO();
-        employeeProfile = ServiceNowMapper.toEmployeeProfileDTO(onboardingCandidateInfoDTO); // Return transformed response
-        return employeeProfile;
+        // Map other statuses appropriately
+        GlobalUtils.handleOtherStatuses(code, sapResponse.getMessage());
+        return null;
+    }
+
+    @Override
+    public PaginatedResponse<EmployeeProfileDTO> getEmployeeProfiles(int skip, int limit) {
+        BaseResponse sapResponse = sapClient.getEmployeeProfiles(skip, limit);
+        String code = sapResponse.getCode();
+        if ("200".equals(code)) {
+            SapPagedResponse<?> sapPaged = (SapPagedResponse<?>) sapResponse.getData();
+
+            List<OnboardingCandidateInfoDTO> content = (List<OnboardingCandidateInfoDTO>) sapPaged.getContent();
+            List<EmployeeProfileDTO> mapped = content.stream()
+                    .map(serviceNowMapper::toEmployeeProfileDTO)
+                    .collect(Collectors.toList());
+
+            long total = sapPaged.getTotalElements();
+            boolean hasNext = (skip + mapped.size()) < total;
+            Integer nextSkip = hasNext ? skip + mapped.size() : null;
+
+            PaginatedResponse<EmployeeProfileDTO> resp = new PaginatedResponse<>();
+            resp.setData(mapped);
+            resp.setTotalRecords(total);
+            resp.setSkip(skip);
+            resp.setLimit(limit);
+            resp.setHasNext(hasNext);
+            resp.setNextSkip(nextSkip);
+            return resp;
+        }
+        // Map other statuses appropriately
+        GlobalUtils.handleOtherStatuses(code, sapResponse.getMessage());
+        return null;
     }
 }
