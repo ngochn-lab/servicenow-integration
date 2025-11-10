@@ -1,7 +1,10 @@
 package com.cag.servicenow_integration.exception;
 
-import com.cag.servicenow_integration.response.BaseResponse;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
+
+import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.stream.Collectors;
 
 import org.springframework.http.HttpStatus;
@@ -9,53 +12,65 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
-import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.server.ResponseStatusException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<?> handleValidation(MethodArgumentNotValidException ex) {
-        String message = ex.getBindingResult().getFieldErrors().stream()
+    public ResponseEntity<ApiError> handleValidation(MethodArgumentNotValidException ex, HttpServletRequest request) {
+        // Extracts and formats all field validation errors into a single comma-separated string
+        var messages = ex.getBindingResult().getFieldErrors().stream()
                 .map(err -> err.getField() + ": " + err.getDefaultMessage())
-                .collect(Collectors.joining(", "));
-        BaseResponse baseResponse = new BaseResponse();
-        baseResponse.setCode(String.valueOf(HttpStatus.BAD_REQUEST.value()));
-        baseResponse.setMessage(message);
-        return ResponseEntity.badRequest().body(baseResponse);
+                .collect(Collectors.toList());
+
+        ApiError apiError = new ApiError(
+                OffsetDateTime.now(),
+                HttpStatus.BAD_REQUEST.value(),
+                "Validation Error",
+                messages,
+                request.getRequestURI()
+        );
+        return ResponseEntity.badRequest().body(apiError);
     }
 
     @ExceptionHandler(ConstraintViolationException.class)
-    public ResponseEntity<?> handleConstraint(ConstraintViolationException ex) {
-        BaseResponse baseResponse = new BaseResponse();
-        baseResponse.setCode(String.valueOf(HttpStatus.BAD_REQUEST.value()));
-        baseResponse.setMessage(ex.getMessage());
-        return ResponseEntity.badRequest().body(baseResponse);
-    }
+    public ResponseEntity<ApiError> handleConstraint(ConstraintViolationException ex, HttpServletRequest request) {
+        var messages = ex.getConstraintViolations().stream()
+                .map(violation -> violation.getPropertyPath() + ": " + violation.getMessage())
+                .collect(Collectors.toList());
 
-    @ExceptionHandler(HttpStatusCodeException.class)
-    public ResponseEntity<?> handleAdapter(HttpStatusCodeException ex) {
-        int status = ex.getStatusCode().value();
-        BaseResponse baseResponse = new BaseResponse();
-        baseResponse.setCode(String.valueOf(status));
-        baseResponse.setMessage(ex.getStatusText());
-        return ResponseEntity.status(status).body(baseResponse);
+        ApiError apiError = new ApiError(
+                OffsetDateTime.now(),
+                HttpStatus.BAD_REQUEST.value(),
+                "Constraint Violation",
+                messages,
+                request.getRequestURI()
+        );
+        return ResponseEntity.badRequest().body(apiError);
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<?> handleOther(Exception ex) {
-        BaseResponse baseResponse = new BaseResponse();
-        baseResponse.setCode(String.valueOf(HttpStatus.INTERNAL_SERVER_ERROR.value()));
-        baseResponse.setMessage("Unexpected error: " + ex.getMessage());
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(baseResponse);
+    public ResponseEntity<?> handleOther(Exception ex, HttpServletRequest request) {
+        ApiError apiError = new ApiError(
+                OffsetDateTime.now(),
+                HttpStatus.INTERNAL_SERVER_ERROR.value(),
+                "Internal Server Error",
+                List.of(ex.getMessage()),
+                request.getRequestURI()
+        );
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(apiError);
     }
 
     @ExceptionHandler(ResponseStatusException.class)
-    public ResponseEntity<?> handleNotFound(ResponseStatusException ex) {
-        BaseResponse baseResponse = new BaseResponse();
-        baseResponse.setCode(String.valueOf(ex.getStatusCode().value()));
-        baseResponse.setMessage(ex.getReason());
-        return ResponseEntity.status(ex.getStatusCode()).body(baseResponse);
+    public ResponseEntity<?> handleByStatus(ResponseStatusException ex, HttpServletRequest request) {
+        ApiError apiError = new ApiError(
+                OffsetDateTime.now(),
+                ex.getStatusCode().value(),
+                ex.getLocalizedMessage(),
+                List.of(ex.getMessage()),
+                request.getRequestURI()
+        );
+        return ResponseEntity.status(ex.getStatusCode()).body(apiError);
     }
 }
 
