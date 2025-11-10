@@ -6,10 +6,10 @@ import com.cag.servicenow_integration.dto.servicenow.EmployeeProfileDTO;
 import com.cag.servicenow_integration.mapper.ServiceNowMapper;
 import com.cag.servicenow_integration.response.BaseResponse;
 import com.cag.servicenow_integration.response.PaginatedResponse;
-import com.cag.servicenow_integration.response.SapPagedResponse;
 import com.cag.servicenow_integration.service.SuccessFactorsService;
 import com.cag.servicenow_integration.utils.GlobalUtils;
 import org.springframework.stereotype.Service;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -41,25 +41,23 @@ public class SuccessFactorsServiceImpl implements SuccessFactorsService {
         BaseResponse sapResponse = sapClient.getEmployeeProfiles(skip, limit);
         String code = sapResponse.getCode();
         if ("200".equals(code)) {
-            SapPagedResponse<?> sapPaged = (SapPagedResponse<?>) sapResponse.getData();
+            PaginatedResponse<OnboardingCandidateInfoDTO> sapPaged = (PaginatedResponse<OnboardingCandidateInfoDTO>) sapResponse.getData();
 
-            List<OnboardingCandidateInfoDTO> content = (List<OnboardingCandidateInfoDTO>) sapPaged.getContent();
+            List<OnboardingCandidateInfoDTO> content = sapPaged.getData() != null
+                    ? sapPaged.getData()
+                    : Collections.emptyList();
             List<EmployeeProfileDTO> mapped = content.stream()
                     .map(serviceNowMapper::toEmployeeProfileDTO)
                     .collect(Collectors.toList());
 
-            long total = sapPaged.getTotalElements();
-            boolean hasNext = (skip + mapped.size()) < total;
-            Integer nextSkip = hasNext ? skip + mapped.size() : null;
-
-            PaginatedResponse<EmployeeProfileDTO> resp = new PaginatedResponse<>();
-            resp.setData(mapped);
-            resp.setTotalRecords(total);
-            resp.setSkip(skip);
-            resp.setLimit(limit);
-            resp.setHasNext(hasNext);
-            resp.setNextSkip(nextSkip);
-            return resp;
+            return PaginatedResponse.<EmployeeProfileDTO>builder()
+                    .data(mapped)
+                    .totalRecords(sapPaged.getTotalRecords())
+                    .skip(sapPaged.getSkip())
+                    .limit(sapPaged.getLimit())
+                    .hasNext(sapPaged.isHasNext())
+                    .nextSkip(sapPaged.getNextSkip())
+                    .build();
         }
         // Map other statuses appropriately
         GlobalUtils.handleOtherStatuses(code, sapResponse.getMessage());
