@@ -6,17 +6,19 @@ import com.cag.servicenow_integration.dto.servicenow.EmployeeProfileDTO;
 import com.cag.servicenow_integration.mapper.ServiceNowMapper;
 import com.cag.servicenow_integration.response.BaseResponse;
 import com.cag.servicenow_integration.response.PaginatedResponse;
-import com.cag.servicenow_integration.response.SapPagedResponse;
 import com.cag.servicenow_integration.service.SuccessFactorsService;
-import com.cag.servicenow_integration.utils.GlobalUtils;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import java.util.Collections;
 import java.util.List;
-import java.util.stream.Collectors;
+import java.util.Optional;
 
 @Service
 public class SuccessFactorsServiceImpl implements SuccessFactorsService {
     private final SAPClient sapClient;
+
     private final ServiceNowMapper serviceNowMapper;
+
     public SuccessFactorsServiceImpl(SAPClient sapClient, ServiceNowMapper serviceNowMapper) {
         this.sapClient = sapClient;
         this.serviceNowMapper = serviceNowMapper;
@@ -28,41 +30,31 @@ public class SuccessFactorsServiceImpl implements SuccessFactorsService {
         BaseResponse sapResponse = sapClient.getEmployeeProfile(id);
         String code = sapResponse.getCode();
         OnboardingCandidateInfoDTO onboardingCandidateInfoDTO = (OnboardingCandidateInfoDTO) sapResponse.getData();
-        if ("200".equals(code) && onboardingCandidateInfoDTO != null) {
+        if (String.valueOf(HttpStatus.OK.value()).equals(code) && onboardingCandidateInfoDTO != null) {
             return serviceNowMapper.toEmployeeProfileDTO(onboardingCandidateInfoDTO);
         }
-        // Map other statuses appropriately
-        GlobalUtils.handleOtherStatuses(code, sapResponse.getMessage());
         return null;
     }
 
     @Override
     public PaginatedResponse<EmployeeProfileDTO> getEmployeeProfiles(int skip, int limit) {
         BaseResponse sapResponse = sapClient.getEmployeeProfiles(skip, limit);
-        String code = sapResponse.getCode();
-        if ("200".equals(code)) {
-            SapPagedResponse<?> sapPaged = (SapPagedResponse<?>) sapResponse.getData();
+        if (!String.valueOf(HttpStatus.OK.value()).equals(sapResponse.getCode())) return null;
 
-            List<OnboardingCandidateInfoDTO> content = (List<OnboardingCandidateInfoDTO>) sapPaged.getContent();
-            List<EmployeeProfileDTO> mapped = content.stream()
-                    .map(serviceNowMapper::toEmployeeProfileDTO)
-                    .collect(Collectors.toList());
+        PaginatedResponse<OnboardingCandidateInfoDTO> sapPaginatedResponse = (PaginatedResponse<OnboardingCandidateInfoDTO>) sapResponse.getData();
 
-            long total = sapPaged.getTotalElements();
-            boolean hasNext = (skip + mapped.size()) < total;
-            Integer nextSkip = hasNext ? skip + mapped.size() : null;
+        List<OnboardingCandidateInfoDTO> content = Optional.ofNullable(sapPaginatedResponse.getData()).orElse(Collections.emptyList());
+        List<EmployeeProfileDTO> serviceNowResponse = content.stream()
+                .map(serviceNowMapper::toEmployeeProfileDTO)
+                .toList();
 
-            PaginatedResponse<EmployeeProfileDTO> resp = new PaginatedResponse<>();
-            resp.setData(mapped);
-            resp.setTotalRecords(total);
-            resp.setSkip(skip);
-            resp.setLimit(limit);
-            resp.setHasNext(hasNext);
-            resp.setNextSkip(nextSkip);
-            return resp;
-        }
-        // Map other statuses appropriately
-        GlobalUtils.handleOtherStatuses(code, sapResponse.getMessage());
-        return null;
+        return PaginatedResponse.<EmployeeProfileDTO>builder()
+                .data(serviceNowResponse)
+                .totalRecords(sapPaginatedResponse.getTotalRecords())
+                .skip(sapPaginatedResponse.getSkip())
+                .limit(sapPaginatedResponse.getLimit())
+                .hasNext(sapPaginatedResponse.isHasNext())
+                .nextSkip(sapPaginatedResponse.getNextSkip())
+                .build();
     }
 }
