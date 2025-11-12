@@ -13,7 +13,7 @@ public class ServiceNowMapper {
     public ServiceNowMapper(ServiceNowApiProperties serviceNowApiProperties) {
         this.serviceNowApiProperties = serviceNowApiProperties;
     }
-
+    // Dung interface Mapstruct
     public EmployeeProfileDTO toEmployeeProfileDTO(OnboardingCandidateInfoDTO onboardingCandidateInfoDTO) {
         EmployeeProfileDTO employeeProfile = new EmployeeProfileDTO();
 

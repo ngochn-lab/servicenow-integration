@@ -1,12 +1,12 @@
 package com.cag.servicenow_integration.controller;
 
+import com.cag.servicenow_integration.constants.Constants;
 import com.cag.servicenow_integration.dto.servicenow.EmployeeProfileDTO;
 import com.cag.servicenow_integration.response.PaginatedResponse;
 import com.cag.servicenow_integration.response.ServiceNowResponse;
 import com.cag.servicenow_integration.service.SuccessFactorsService;
 import com.cag.servicenow_integration.utils.CsvUtils;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -46,9 +46,8 @@ public class ServicenowController {
     public ResponseEntity<String> getEmployeeProfileCsv(@PathVariable String id) {
         EmployeeProfileDTO employeeProfile = successFactorsService.getEmployeeProfile(id);
         return ResponseEntity.ok()
-            .contentType(MediaType.parseMediaType("text/csv"))
-            // Add this if wanting to download it as file on browser
-            .header("Content-Disposition", "attachment; filename=\"employee_profile_" + id + ".csv\"")
+            .contentType(Constants.MEDIA_TYPE_CSV) // The Content-Type header tells clients how to handle the response
+            .header(Constants.CONTENT_DISPOSITION_HEADER, String.format(Constants.CONTENT_DISPOSITION_FILENAME_TEMPLATE, id)) // Add this if wanting to download it as file on browser
             .body(CsvUtils.toCsv(employeeProfile));
     }
 }

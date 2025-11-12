@@ -2,7 +2,7 @@ package com.cag.servicenow_integration.utils;
 
 import com.cag.servicenow_integration.dto.servicenow.EmployeeProfileDTO;
 
-
+// Rewrite -> dynamic / library
 public class CsvUtils {
     public static String toCsv(EmployeeProfileDTO dto) {
         StringBuilder sb = new StringBuilder();
