@@ -2,9 +2,10 @@ package com.cag.servicenow_integration.service.impl;
 
 import com.cag.servicenow_integration.client.SAPClient;
 import com.cag.servicenow_integration.config.SAPApiProperties;
+import com.cag.servicenow_integration.domain.OnboardingCandidateInfo;
 import com.cag.servicenow_integration.dto.sap.OnboardingCandidateInfoDTO;
 import com.cag.servicenow_integration.dto.servicenow.EmployeeProfileDTO;
-import com.cag.servicenow_integration.mapper.ServiceNowMapper;
+import com.cag.servicenow_integration.mapper.OnboardingMapper;
 import com.cag.servicenow_integration.response.PaginatedResponse;
 import com.cag.servicenow_integration.response.sap.PageMetaDTO;
 import com.cag.servicenow_integration.response.sap.ResponseDTO;
@@ -22,14 +23,14 @@ import java.util.Optional;
 public class SuccessFactorsServiceImpl implements SuccessFactorsService {
     private final SAPClient sapClient;
 
-    private final ServiceNowMapper serviceNowMapper;
-
     private final SAPApiProperties sapApiProperties;
 
-    public SuccessFactorsServiceImpl(SAPClient sapClient, ServiceNowMapper serviceNowMapper, SAPApiProperties sapApiProperties) {
+    private final OnboardingMapper onboardingMapper;
+
+    public SuccessFactorsServiceImpl(SAPClient sapClient, SAPApiProperties sapApiProperties, OnboardingMapper onboardingMapper) {
         this.sapClient = sapClient;
-        this.serviceNowMapper = serviceNowMapper;
         this.sapApiProperties = sapApiProperties;
+        this.onboardingMapper = onboardingMapper;
     }
 
     @Override
@@ -37,9 +38,10 @@ public class SuccessFactorsServiceImpl implements SuccessFactorsService {
         String url = buildUrl(sapApiProperties.getBaseUrl(), sapApiProperties.getOnboardingCandidateEndpoint(), id);
         log.debug("Requesting SAP profile with url: ", url);
         ResponseDTO<OnboardingCandidateInfoDTO> sapResponse = sapClient.getRequest(url, new ParameterizedTypeReference<ResponseDTO<OnboardingCandidateInfoDTO>>() {});
-        OnboardingCandidateInfoDTO onboardingCandidateInfoDTO = (OnboardingCandidateInfoDTO) sapResponse.getData();
+        OnboardingCandidateInfoDTO onboardingCandidateInfoDTO = sapResponse.getData();
         if (HttpStatus.OK.value() == sapResponse.getCode() && onboardingCandidateInfoDTO != null) {
-            return serviceNowMapper.toEmployeeProfileDTO(onboardingCandidateInfoDTO);
+            OnboardingCandidateInfo onboardingCandidateInfo = onboardingMapper.toDomain(onboardingCandidateInfoDTO);
+            return onboardingMapper.toEmployeeProfileDTO(onboardingCandidateInfo);
         }
         return null;
     }
@@ -59,9 +61,12 @@ public class SuccessFactorsServiceImpl implements SuccessFactorsService {
                 .nextSkip(sapResponse.getData().getNumber() + sapResponse.getData().getSize())
                 .build();
 
-        List<OnboardingCandidateInfoDTO> content = Optional.ofNullable(paginatedResponse.getData()).orElse(Collections.emptyList());
+        List<OnboardingCandidateInfo> content = Optional.ofNullable(paginatedResponse.getData())
+                .orElse(Collections.emptyList()).stream()
+                .map(onboardingMapper::toDomain)
+                .toList();
         List<EmployeeProfileDTO> serviceNowResponse = content.stream()
-                .map(serviceNowMapper::toEmployeeProfileDTO)
+                .map(onboardingMapper::toEmployeeProfileDTO)
                 .toList();
 
         return PaginatedResponse.<EmployeeProfileDTO>builder()
